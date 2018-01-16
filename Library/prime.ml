@@ -195,13 +195,6 @@ let DIVIDES_1 = prove
  (`!x. 1 divides x`,
   NUMBER_TAC);;
 
-let DIVIDES_ONE = prove(
-  `!x. (x divides 1) <=> (x = 1)`,
-  GEN_TAC THEN REWRITE_TAC[divides] THEN
-  CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV SYM_CONV)) THEN
-  REWRITE_TAC[MULT_EQ_1] THEN EQ_TAC THEN STRIP_TAC THEN
-  ASM_REWRITE_TAC[] THEN EXISTS_TAC `1` THEN REFL_TAC);;
-
 let DIVIDES_REFL = prove
  (`!x. x divides x`,
   NUMBER_TAC);;
@@ -209,17 +202,6 @@ let DIVIDES_REFL = prove
 let DIVIDES_TRANS = prove
  (`!a b c. a divides b /\ b divides c ==> a divides c`,
   NUMBER_TAC);;
-
-let DIVIDES_ANTISYM = prove
- (`!x y. x divides y /\ y divides x <=> (x = y)`,
-  REPEAT GEN_TAC THEN EQ_TAC THENL
-   [REWRITE_TAC[divides] THEN
-    DISCH_THEN(CONJUNCTS_THEN2 MP_TAC (CHOOSE_THEN SUBST1_TAC)) THEN
-    DISCH_THEN(CHOOSE_THEN MP_TAC) THEN
-    CONV_TAC(LAND_CONV SYM_CONV) THEN
-    REWRITE_TAC[GSYM MULT_ASSOC; MULT_FIX; MULT_EQ_1] THEN
-    STRIP_TAC THEN ASM_REWRITE_TAC[];
-    DISCH_THEN SUBST1_TAC THEN REWRITE_TAC[DIVIDES_REFL]]);;
 
 let DIVIDES_ADD = prove
  (`!d a b. d divides a /\ d divides b ==> d divides (a + b)`,
@@ -292,13 +274,6 @@ let DIVIDES_CASES = prove
   SIMP_TAC[divides; LEFT_IMP_EXISTS_THM] THEN
   REWRITE_TAC[MULT_EQ_0; EQ_MULT_LCANCEL; LE_MULT_LCANCEL] THEN ARITH_TAC);;
 
-let DIVIDES_LE_STRONG = prove
- (`!m n. m divides n ==> 1 <= m /\ m <= n \/ n = 0`,
-  REPEAT GEN_TAC THEN ASM_CASES_TAC `m = 0` THEN
-  ASM_REWRITE_TAC[DIVIDES_ZERO; ARITH] THEN
-  DISCH_THEN(MP_TAC o MATCH_MP DIVIDES_LE) THEN
-  POP_ASSUM MP_TAC THEN ARITH_TAC);;
-
 let DIVIDES_DIV_NOT = prove(
   `!n x q r. (x = (q * n) + r) /\ 0 < r /\ r < n ==> ~(n divides x)`,
   REPEAT GEN_TAC THEN STRIP_TAC THEN ASM_REWRITE_TAC[] THEN
@@ -322,6 +297,10 @@ let DIVIDES_EXP = prove(
 let DIVIDES_EXP2 = prove(
   `!n x y. ~(n = 0) /\ (x EXP n) divides y ==> x divides y`,
   INDUCT_TAC THEN REWRITE_TAC[NOT_SUC; EXP] THEN NUMBER_TAC);;
+
+let DIVIDES_EXP_LE_IMP = prove
+ (`!p m n. m <= n ==> (p EXP m) divides (p EXP n)`,
+  SIMP_TAC[LE_EXISTS; LEFT_IMP_EXISTS_THM; EXP_ADD] THEN NUMBER_TAC);;
 
 let DIVIDES_EXP_LE = prove
  (`!p m n. 2 <= p ==> ((p EXP m) divides (p EXP n) <=> m <= n)`,
@@ -967,13 +946,6 @@ let CHINESE_REMAINDER = prove
   REWRITE_TAC[MULT_AC] THEN REWRITE_TAC[ADD_AC]);;
 
 (* ------------------------------------------------------------------------- *)
-(* Primality                                                                 *)
-(* ------------------------------------------------------------------------- *)
-
-let prime = new_definition
-  `prime(p) <=> ~(p = 1) /\ !x. x divides p ==> (x = 1) \/ (x = p)`;;
-
-(* ------------------------------------------------------------------------- *)
 (* A few useful theorems about primes                                        *)
 (* ------------------------------------------------------------------------- *)
 
@@ -1529,6 +1501,10 @@ let LE_INDEX = prove
   ASM_CASES_TAC `p = 1` THEN ASM_REWRITE_TAC[] THEN
   REWRITE_TAC[index_def; ARITH; CONJUNCT1 LE]);;
 
+let EXP_INDEX_DIVIDES = prove
+ (`!p n. p EXP (index p n) divides n`,
+  MESON_TAC[LE_INDEX; LE_REFL]);;
+
 let INDEX_1 = prove
  (`!p. index p 1 = 0`,
   GEN_TAC THEN REWRITE_TAC[index_def; ARITH] THEN COND_CASES_TAC THEN
@@ -1669,6 +1645,29 @@ let INDEX_DECOMPOSITION_PRIME = prove
   ASM_CASES_TAC `p = 1` THENL [ASM_MESON_TAC[PRIME_1]; ASM_REWRITE_TAC[]] THEN
   ASM_CASES_TAC `n = 0` THEN ASM_REWRITE_TAC[] THEN
   ASM_MESON_TAC[PRIME_COPRIME_STRONG]);;
+
+let INDEX_ADD_MIN = prove
+ (`!p m n. MIN (index p m) (index p n) <= index p (m + n)`,
+  REPEAT STRIP_TAC THEN ASM_CASES_TAC `p = 1` THENL
+   [ASM_SIMP_TAC[index_def] THEN ARITH_TAC; REWRITE_TAC[LE_INDEX]] THEN
+  ASM_SIMP_TAC[ADD_EQ_0; INDEX_EQ_0; ARITH_RULE
+   `MIN a b = 0 <=> a = 0 \/ b = 0`] THEN
+  MATCH_MP_TAC DIVIDES_ADD THEN CONJ_TAC THEN MATCH_MP_TAC DIVIDES_TRANS THENL
+   [EXISTS_TAC `p EXP (index p m)`; EXISTS_TAC `p EXP (index p n)`] THEN
+  REWRITE_TAC[EXP_INDEX_DIVIDES] THEN
+  MATCH_MP_TAC DIVIDES_EXP_LE_IMP THEN ARITH_TAC);;
+
+let INDEX_SUB_MIN = prove
+ (`!p m n. n < m ==> MIN (index p m) (index p n) <= index p (m - n)`,
+  REPEAT STRIP_TAC THEN ASM_CASES_TAC `p = 1` THENL
+   [ASM_SIMP_TAC[index_def] THEN ARITH_TAC; REWRITE_TAC[LE_INDEX]] THEN
+  ASM_SIMP_TAC[SUB_EQ_0; GSYM NOT_LT] THEN
+  MATCH_MP_TAC DIVIDES_ADD_REVL THEN EXISTS_TAC `n:num` THEN
+  ASM_SIMP_TAC[SUB_ADD; LT_IMP_LE] THEN
+  CONJ_TAC THEN MATCH_MP_TAC DIVIDES_TRANS THENL
+   [EXISTS_TAC `p EXP (index p n)`; EXISTS_TAC `p EXP (index p m)`] THEN
+  REWRITE_TAC[EXP_INDEX_DIVIDES] THEN
+  MATCH_MP_TAC DIVIDES_EXP_LE_IMP THEN ARITH_TAC);;
 
 (* ------------------------------------------------------------------------- *)
 (* Least common multiples.                                                   *)

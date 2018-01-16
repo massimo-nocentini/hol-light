@@ -304,9 +304,9 @@ let LAMBDA_PAIR_THM = prove
  (`!t. (\p. t p) = (\(x,y). t(x,y))`,
   REWRITE_TAC[FORALL_PAIR_THM; FUN_EQ_THM]);;
 
-let LAMBDA_UNPAIR_THM = prove
- (`!f:A->B->C. (\ (x:A,y:B). f x y) = (\p. f (FST p) (SND p))`,
-  REWRITE_TAC[LAMBDA_PAIR_THM]);;
+let LAMBDA_PAIR = prove                                                        
+ (`!f:A->B->C. (\(x,y). f x y) = (\p. f (FST p) (SND p))`,
+  REWRITE_TAC[LAMBDA_PAIR_THM]);;      
 
 let PAIRED_ETA_THM = prove
  (`(!f. (\(x,y). f (x,y)) = f) /\
@@ -340,6 +340,25 @@ let FORALL_UNPAIR_THM = prove
 let EXISTS_UNPAIR_THM = prove
  (`!P. (?x y. P x y) <=> ?z. P (FST z) (SND z)`,
   REWRITE_TAC[EXISTS_PAIR_THM; FST; SND] THEN MESON_TAC[]);;
+
+let FORALL_PAIR_FUN_THM = prove
+ (`!P. (!f:A->B#C. P f) <=> (!g h. P(\a. g a,h a))`,
+  GEN_TAC THEN EQ_TAC THEN DISCH_TAC THEN ASM_REWRITE_TAC[] THEN
+  GEN_TAC THEN GEN_REWRITE_TAC RAND_CONV [GSYM ETA_AX] THEN
+  GEN_REWRITE_TAC BINDER_CONV [GSYM PAIR] THEN PURE_ASM_REWRITE_TAC[]);;
+
+let EXISTS_PAIR_FUN_THM = prove
+ (`!P. (?f:A->B#C. P f) <=> (?g h. P(\a. g a,h a))`,
+  REWRITE_TAC[MESON[] `(?x. P x) <=> ~(!x. ~P x)`] THEN
+  REWRITE_TAC[FORALL_PAIR_FUN_THM]);;
+
+let FORALL_UNPAIR_FUN_THM = prove
+ (`!P. (!f g. P f g) <=> (!h. P (FST o h) (SND o h))`,
+  REWRITE_TAC[FORALL_PAIR_FUN_THM; o_DEF; ETA_AX]);;
+
+let EXISTS_UNPAIR_FUN_THM = prove
+ (`!P. (?f g. P f g) <=> (?h. P (FST o h) (SND o h))`,
+  REWRITE_TAC[EXISTS_PAIR_FUN_THM; o_DEF; ETA_AX]);;
 
 (* ------------------------------------------------------------------------- *)
 (* Related theorems for explicitly paired quantifiers.                       *)
@@ -375,7 +394,7 @@ let EXISTS_TRIPLED_THM = prove
 
 let CHOICE_UNPAIR_THM = prove
  (`!P. (@(x:A,y:B). P x y) = (@p. P (FST p) (SND p))`,
-  REWRITE_TAC[LAMBDA_UNPAIR_THM]);;
+  REWRITE_TAC[LAMBDA_PAIR]);;
 
 let CHOICE_PAIRED_THM = prove
  (`!P Q. (?x:A y:B. P x y) /\ (!x y. P x y ==> Q(x,y)) ==> Q (@(x,y). P x y)`,

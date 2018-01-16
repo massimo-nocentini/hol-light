@@ -94,7 +94,8 @@ let to_be_generalized tm tml gen =
 (*----------------------------------------------------------------------------*)
 
 let terms_to_be_generalized tm =
-   let accessors = (all_accessors ()) @ (all_constructors())
+   let accessors = (all_accessors ())
+(* @ (all_constructors()) *)
    in  let rec terms_to_be_generalized' tml =
           if (tml = [])
           then []
@@ -249,7 +250,7 @@ try
   in if (countercheck = true) then let proof th'' =
          let th' = SPECL gen_terms (GENL new_vars th'')
          in  rev_itlist ELIM_LEMMA lemmas th'
-  in   (proof_print_string_l "-> Generalize Heuristic"() ; my_gen_terms := tm''::!my_gen_terms ; ([(tm'',ind)],apply_proof (proof o hd) [tm'']))
+  in   (proof_print_string_l "-> Generalize Heuristic"() ; my_gen_terms := tm''::!my_gen_terms ; ([(tm'',ind)],apply_fproof "generalize_heuristic" (proof o hd) [tm'']))
   else failwith "Counter example failure!"
  ) with Failure _ -> failwith "generalize_heuristic";;
 
@@ -384,7 +385,7 @@ let rec contains_any tm args =
 let is_rec_type tm = try( mem ((fst o dest_type o type_of) tm) (shells()) ) with Failure _ -> false;;
 
 let is_generalizable_subterm bad tm =
-    (is_rec_type tm) &
+    (is_rec_type tm) &&
     not ( (is_var tm) || 
           (is_const tm) ||
           (is_numeral tm) ||
@@ -404,7 +405,7 @@ let is_suitable_proposal s phi gens =
     ( forall (fun tm -> mem tm gens) s ) && (exists (fun tm -> lcount tm gens > 1) s);;
 
 
-let checksuitableeq = ref true;; (* equation criterion *)
+let checksuitableeq = ref false;; (* equation criterion *)
 let newisgen = ref true;; (* Use Aderhold's (true) or Boulton's (false) is_generalizable for terms *)
 
 let is_eq_suitable t eq =
@@ -507,7 +508,7 @@ let useful_apart_generalization v v' tm gen =
     warn true ("Could not generate counter example: " ^ s) ; true
     in eqsok && (generalized_apart_successfully v v' tm gen) && countercheck;;
 
-let generalize_Apart tm =
+let generalize_apart tm =
     let is_fun tm = (try( mem ((fst o dest_const o fst o strip_comb) tm) (defs_names ()) ) with Failure _ -> false)
     in let fs = find_bm_terms is_fun tm
     in let dfs = map strip_comb fs
@@ -521,7 +522,8 @@ let generalize_Apart tm =
            in can (find match_filter) dfs )
     in let (f,args) = try( find (fun (op,args) -> find_f (op,args) dfs) dfs ) with Failure _ -> failwith ""
     in let v = el ((get_rec_pos_of_fun f) -1) args
-    in let v' = distinct_var (flat (map frees args)) (type_of v)
+    in let v' = distinct_var (frees tm) (type_of v)
+	    (*distinct_var (flat (map frees args)) (type_of v)*)
     in let gen = separate f v v' false tm
     in if (useful_apart_generalization v v' tm gen) then (gen,[v',v])
        else let pcs = map fst dfs
@@ -540,6 +542,31 @@ let generalize_Apart tm =
 (*----------------------------------------------------------------------------*)
 let checkgen = ref true;;
 
+let generalize_heuristic_aderhold (tm,(ind:bool)) =
+if (mem tm !my_gen_terms && !checkgen) then failwith ""
+else 
+try
+ (let ELIM_LEMMA lemma th =
+     let rest = snd (dest_disj (concl th))
+     in  EQ_MP (CONV_RULE (RAND_CONV (REWR_CONV F_OR))
+                          (AP_THM (AP_TERM `(\/)` lemma) rest)) th
+  in let (tm',subs) = try( generalize_apart tm ) with Failure _ -> (tm,[])
+  in let (new_ap_vars,gen_ap_terms) = List.split subs
+  in let (tm'',subs) = try( generalizeCommonSubterms tm' ) with Failure _ -> (tm',[])
+  in if (tm = tm'') then failwith ""
+  else let (new_vars,gen_terms) = List.split subs 
+  in let lemmas = []
+  in  let countercheck = try counter_check 5 tm'' with Failure s -> 
+    warn true ("Could not generate counter example: " ^ s) ; true
+      in if (countercheck = true) then let proof th'' =
+      let th' = ((SPECL gen_ap_terms) o (GENL new_ap_vars) o
+		    (SPECL gen_terms) o (GENL new_vars)) th''
+         in  rev_itlist ELIM_LEMMA lemmas th'
+  in   (proof_print_string_l "-> Generalize Heuristic"() ; my_gen_terms := tm''::!my_gen_terms ; ([(tm'',ind)],apply_fproof "generalize_heuristic_aderhold" (proof o hd) [tm'']))
+  else failwith "Counter example failure!"
+ ) with Failure _ -> failwith "generalize_heuristic";;
+
+
 let generalize_heuristic_ext (tm,(ind:bool)) =
 if (mem tm !my_gen_terms && !checkgen) then failwith ""
 else 
@@ -548,19 +575,19 @@ try
      let rest = snd (dest_disj (concl th))
      in  EQ_MP (CONV_RULE (RAND_CONV (REWR_CONV F_OR))
                           (AP_THM (AP_TERM `(\/)` lemma) rest)) th
-  in let (tm',subs) = try( generalize_Apart tm ) with Failure _ -> (tm,[])
-  in let (new_vars,gen_terms) = List.split subs
-  in let (tm'',subs) = try( generalizeCommonSubterms tm' ) with Failure _ -> (tm',[])
-  in if (tm = tm'') then failwith ""
-  else let (new_vars',gen_terms') = List.split subs 
-  in let gen_terms = gen_terms@gen_terms' and new_vars = new_vars @ new_vars'
-  in let lemmas = []
-  in  let countercheck = try counter_check 5 tm'' with Failure s -> 
-    warn true ("Could not generate counter example: " ^ s) ; true
+  in  let lemmas = []
+  in let (tm',subs) = try( generalize_apart tm ) with Failure _ -> (tm,[])
+  in let (new_ap_vars,gen_ap_terms) = List.split subs
+  in let gen_terms = terms_to_be_generalized tm'
+  in let _ = check (fun l ->  not (l = [])) (gen_ap_terms@gen_terms) 
+  in  let new_vars = distinct_vars (frees tm') (map type_of gen_terms)
+  in  let tm'' = subst (lcombinep (new_vars,gen_terms)) tm'
+  in  let countercheck = try counter_check 5 tm'' with Failure _ -> 
+    warn true "Could not generate counter example!" ; true
   in if (countercheck = true) then let proof th'' =
-         let th' = SPECL gen_terms (GENL new_vars th'')
-         in  rev_itlist ELIM_LEMMA lemmas th'
-  in   (proof_print_string_l "-> Generalize Heuristic"() ; my_gen_terms := tm''::!my_gen_terms ; ([(tm'',ind)],apply_proof (proof o hd) [tm'']))
+     let th' = ((SPECL gen_ap_terms) o (GENL new_ap_vars) o
+       (SPECL gen_terms) o (GENL new_vars)) th''
+         in rev_itlist ELIM_LEMMA lemmas th'
+  in   (proof_print_string_l "-> Generalize Heuristic"() ; my_gen_terms := tm''::!my_gen_terms ; ([(tm'',ind)],apply_fproof "generalize_heuristic_ext" (proof o hd) [tm'']))
   else failwith "Counter example failure!"
  ) with Failure _ -> failwith "generalize_heuristic";;
-

@@ -130,7 +130,7 @@ let (INSTANTIATE : instantiation->thm->thm) =
       try let eth = HO_BETAS bcs (concl ith) (concl tth) in
           EQ_MP eth tth
       with Failure _ -> tth
-    else failwith "INSTANTIATE: term || type var free in assumptions";;
+    else failwith "INSTANTIATE: term or type var free in assumptions";;
 
 let (INSTANTIATE_ALL : instantiation->thm->thm) =
   fun ((_,tmin,tyin) as i) th ->
@@ -198,7 +198,7 @@ let (term_match:term list -> term -> term -> instantiation) =
         term_pmatch lconsts ((cv,vv)::env) vbod cbod sofar'
     | _ ->
       let vhop = repeat rator vtm in
-      if is_var vhop && not (mem vhop lconsts) &
+      if is_var vhop && not (mem vhop lconsts) &&
                        not (can (rev_assoc vhop) env) then
         let vty = type_of vtm and cty = type_of ctm in
         let insts' =
