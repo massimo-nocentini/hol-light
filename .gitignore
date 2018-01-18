@@ -3,3 +3,5 @@
 pa_j.cmi
 pa_j.cmo
 pa_j.ml
+update_database.ml
+mkfifo-sessions/
