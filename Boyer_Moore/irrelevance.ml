@@ -94,8 +94,8 @@ try  (
       let tm' = if (is_neg tm) then (rand tm) else tm
   in  let (f,args) = strip_comb tm'
   in  let name = fst (dest_const f)
-  in  (not ((fst o get_def) name = 0)) &
-      (forall is_var args) &
+  in  (not ((fst o get_def) name = 0)) &&
+      (forall is_var args) &&
       (distinct args)
   | _ -> false
  ) with Failure _ -> false;;
@@ -240,4 +240,5 @@ let irrelevance_heuristic (tm,(ind:bool)) =
        else if (outs = []) then failwith "irrelevance_heuristic"
        else let tm' = list_mk_disj (map fst ins)
             and proof = BUILD_DISJ (outs,ins)
-            in  (proof_print_string_l "-> Irrelevance Heuristic" () ;  ([(tm',ind)],apply_proof (proof o hd) [tm']));;
+            in  (proof_print_string_l "-> Irrelevance Heuristic" () ;
+		 ([(tm',ind)],apply_fproof "irrelevance_heuristic" (proof o hd) [tm']));;

@@ -353,7 +353,7 @@ let LIM_COMPLEX_RMUL = prove
 let LIM_CX_LIFT = prove
  (`!net f l.
      ((\x. Cx(f x)) --> Cx l) net <=> ((\x. lift(f x)) --> lift l) net`,
-  REWRITE_TAC[LIM; DIST_LIFT; DIST_CX]);;
+  REWRITE_TAC[tendsto; DIST_LIFT; DIST_CX]);;
 
 let SERIES_CX_LIFT = prove
  (`!f s x.
@@ -422,11 +422,6 @@ let LIM_NULL_COMPLEX_POW = prove
   REPEAT STRIP_TAC THEN
   FIRST_X_ASSUM(MP_TAC o SPEC `n:num` o MATCH_MP LIM_COMPLEX_POW) THEN
   ASM_REWRITE_TAC[COMPLEX_POW_ZERO]);;
-
-let LIM_NULL_COMPLEX_BOUND = prove
- (`!f g. eventually (\n. norm (f n) <= norm (g n)) net /\ (g --> Cx(&0)) net
-         ==> (f --> Cx(&0)) net`,
-  REWRITE_TAC[GSYM COMPLEX_VEC_0; LIM_TRANSFORM_BOUND]);;
 
 let SUMS_COMPLEX_0 = prove
  (`!f s. (!n. n IN s ==> f n = Cx(&0)) ==> (f sums Cx(&0)) s`,
@@ -694,7 +689,7 @@ let CONTINUOUS_COMPLEX_POW = prove
   SIMP_TAC[continuous; LIM_COMPLEX_POW]);;
 
 let CONTINUOUS_CPRODUCT = prove
- (`!(net:B net) f k:A->bool.
+ (`!(net:(real^N)net) f k:A->bool.
         FINITE k /\
         (!i. i IN k ==> f i continuous net)
         ==> (\z. cproduct k (\i. f i z)) continuous net`,
@@ -890,7 +885,7 @@ let CONTINUOUS_CX_DROP = prove
  (`!net f. f continuous net ==> (\x. Cx(drop(f x))) continuous net`,
   REWRITE_TAC[continuous; tendsto] THEN
   REWRITE_TAC[dist; GSYM CX_SUB; COMPLEX_NORM_CX; GSYM DROP_SUB] THEN
-  REWRITE_TAC[GSYM ABS_DROP]);;
+  REWRITE_TAC[GSYM NORM_1]);;
 
 let CONTINUOUS_ON_CX_DROP = prove
  (`!f s. f continuous_on s ==> (\x. Cx(drop(f x))) continuous_on s`,
@@ -898,7 +893,7 @@ let CONTINUOUS_ON_CX_DROP = prove
 
 let CONTINUOUS_CX_LIFT = prove
  (`!f. (\x. Cx(f x)) continuous net <=> (\x. lift(f x)) continuous net`,
-  REWRITE_TAC[continuous; LIM; dist; GSYM CX_SUB; GSYM LIFT_SUB] THEN
+  REWRITE_TAC[continuous; tendsto; dist; GSYM CX_SUB; GSYM LIFT_SUB] THEN
   REWRITE_TAC[COMPLEX_NORM_CX; NORM_LIFT]);;
 
 let CONTINUOUS_ON_CX_LIFT = prove
@@ -1692,12 +1687,6 @@ let HAS_COMPLEX_DERIVATIVE_DIFFERENTIABLE = prove
  (`!f x. (f has_complex_derivative (complex_derivative f x)) (at x) <=>
          f complex_differentiable at x`,
   REWRITE_TAC[complex_differentiable; complex_derivative] THEN MESON_TAC[]);;
-
-let COMPLEX_DIFFERENTIABLE_COMPOSE = prove
- (`!f g z. f complex_differentiable at z /\ g complex_differentiable at (f z)
-          ==> (g o f) complex_differentiable at z`,
-  REWRITE_TAC [complex_differentiable] THEN
-  MESON_TAC [COMPLEX_DIFF_CHAIN_AT]);;
 
 let COMPLEX_DERIVATIVE_CHAIN = prove
  (`!f g z. f complex_differentiable at z /\ g complex_differentiable at (f z)
@@ -2713,7 +2702,7 @@ let COMPLEX_TAYLOR_MVT = prove
 
 let LIM_CNJ = prove
  (`!net f l. ((\x. cnj(f x)) --> cnj l) net <=> (f --> l) net`,
-  REWRITE_TAC[LIM; dist; GSYM CNJ_SUB; COMPLEX_NORM_CNJ]);;
+  REWRITE_TAC[tendsto; dist; GSYM CNJ_SUB; COMPLEX_NORM_CNJ]);;
 
 let SUMS_CNJ = prove
  (`!net f l. ((\x. cnj(f x)) sums cnj l) net <=> (f sums l) net`,
@@ -2738,18 +2727,19 @@ let CONTINUOUS_ON_CNJ = prove
 let REAL_LIM = prove
  (`!net:(A)net f l.
         (f --> l) net /\ ~(trivial_limit net) /\
-        (?b. (?a. netord net a b) /\ !a. netord net a b ==> real(f a))
+        eventually (\a. real(f a)) net
         ==> real l`,
   REWRITE_TAC[IM_DEF; real] THEN REPEAT STRIP_TAC THEN
   MATCH_MP_TAC LIM_COMPONENT_EQ THEN
-  REWRITE_TAC[eventually; DIMINDEX_2; ARITH] THEN ASM_MESON_TAC[]);;
+  REWRITE_TAC[DIMINDEX_2; ARITH] THEN ASM_MESON_TAC[]);;
 
 let REAL_LIM_SEQUENTIALLY = prove
  (`!f l. (f --> l) sequentially /\ (?N. !n. n >= N ==> real(f n))
          ==> real l`,
   REPEAT STRIP_TAC THEN MATCH_MP_TAC(ISPEC `sequentially` REAL_LIM) THEN
-  REWRITE_TAC[SEQUENTIALLY; TRIVIAL_LIMIT_SEQUENTIALLY] THEN
-  ASM_MESON_TAC[GE_REFL]);;
+  REWRITE_TAC[SEQUENTIALLY; EVENTUALLY_SEQUENTIALLY;
+             TRIVIAL_LIMIT_SEQUENTIALLY] THEN
+  ASM_MESON_TAC[GE]);;
 
 let REAL_SERIES = prove
  (`!f l s. (f sums l) s /\ (!n. real(f n)) ==> real l`,
@@ -3057,6 +3047,18 @@ let INTEGRAL_COMPLEX_RMUL = prove
         f integrable_on s ==> integral s (\x. f x * c) = integral s f * c`,
   ONCE_REWRITE_TAC[COMPLEX_MUL_SYM] THEN
   REWRITE_TAC[INTEGRAL_COMPLEX_LMUL]);;
+
+let ABSOLUTELY_INTEGRABLE_COMPLEX_LMUL = prove
+ (`!f s c. f absolutely_integrable_on s
+           ==> (\x. c * f x) absolutely_integrable_on s`,
+  SIMP_TAC[absolutely_integrable_on; INTEGRABLE_COMPLEX_LMUL] THEN
+  SIMP_TAC[COMPLEX_NORM_MUL; LIFT_CMUL; INTEGRABLE_CMUL]);;
+
+let ABSOLUTELY_INTEGRABLE_COMPLEX_RMUL = prove
+ (`!f s c. f absolutely_integrable_on s
+           ==> (\x. f x * c) absolutely_integrable_on s`,
+  ONCE_REWRITE_TAC[COMPLEX_MUL_SYM] THEN
+  REWRITE_TAC[ABSOLUTELY_INTEGRABLE_COMPLEX_LMUL]);;
 
 let REAL_COMPLEX_INTEGRAL = prove
  (`!f:real^N->complex s.
@@ -3904,3 +3906,126 @@ let POWER_SERIES_UNIQUE = prove
   ASM_REWRITE_TAC[REAL_LT_MIN; COMPLEX_SUB_0] THEN
   REWRITE_TAC[COMPLEX_SUB_RDISTRIB] THEN
   ASM_SIMP_TAC[SERIES_SUB]);;
+
+(* ------------------------------------------------------------------------- *)
+(* The only endomorphisms of C that are measurable or map R into R are the   *)
+(* obvious ones. Hence such an automorphism is the identity or conjugation.  *)
+(* ------------------------------------------------------------------------- *)
+
+let MEASURABLE_COMPLEX_ENDOMORPHISM = prove
+ (`!f:complex->complex.
+        f measurable_on (:complex) /\
+        (!x y. f(x + y) = f x + f y) /\
+        (!x y. f(x * y) = f x * f y) <=>
+        f = (\x. Cx(&0)) \/ f = I \/ f = cnj`,
+  GEN_TAC THEN EQ_TAC THENL
+   [STRIP_TAC;
+    STRIP_TAC THEN
+    ASM_REWRITE_TAC[MEASURABLE_ON_CONST; COMPLEX_MUL_LZERO; COMPLEX_ADD_LID;
+                    I_THM; CNJ_ADD; CNJ_MUL] THEN
+    MATCH_MP_TAC CONTINUOUS_IMP_MEASURABLE_ON THEN
+    MATCH_MP_TAC LINEAR_CONTINUOUS_ON THEN
+    REWRITE_TAC[LINEAR_CNJ; LINEAR_I]] THEN
+  SUBGOAL_THEN `linear(f:complex->complex)` ASSUME_TAC THENL
+   [ASM_MESON_TAC[MEASURABLE_ADDITIVE_IMP_LINEAR]; ALL_TAC] THEN
+  ONCE_REWRITE_TAC[TAUT `p \/ q <=> ~p ==> q`] THEN DISCH_TAC THEN
+  SUBGOAL_THEN `!x. real x ==> f x = x` ASSUME_TAC THENL
+   [FIRST_X_ASSUM(MP_TAC o GEN_REWRITE_RULE RAND_CONV [FUN_EQ_THM]) THEN
+    REWRITE_TAC[NOT_FORALL_THM; LEFT_IMP_EXISTS_THM] THEN
+    X_GEN_TAC `z:complex` THEN STRIP_TAC THEN
+    X_GEN_TAC `x:complex` THEN DISCH_TAC THEN
+    FIRST_X_ASSUM(MP_TAC o GEN_REWRITE_RULE I [linear]) THEN
+    DISCH_THEN(MP_TAC o CONJUNCT2) THEN REWRITE_TAC[COMPLEX_CMUL] THEN
+    DISCH_THEN(MP_TAC o SPECL [`Re x`; `z:complex`]) THEN
+    RULE_ASSUM_TAC(REWRITE_RULE[REAL]) THEN
+    ASM_REWRITE_TAC[] THEN
+    UNDISCH_TAC `~(f(z:complex) = Cx(&0))` THEN CONV_TAC COMPLEX_RING;
+    ALL_TAC] THEN
+  SUBGOAL_THEN `f(ii) = ii \/ f(ii) = --ii` MP_TAC THENL
+   [REWRITE_TAC[COMPLEX_RING `z = ii \/ z = --ii <=> z * z = --Cx(&1)`] THEN
+    ASM_MESON_TAC[REAL_NEG; REAL_CX; COMPLEX_RING `ii * ii = --Cx(&1)`];
+    ALL_TAC] THEN
+  MATCH_MP_TAC MONO_OR THEN REPEAT STRIP_TAC THEN
+  REWRITE_TAC[FUN_EQ_THM] THEN X_GEN_TAC `z:complex` THEN
+  SUBST1_TAC(SPEC `z:complex` COMPLEX_EXPAND) THEN
+  ASM_REWRITE_TAC[I_THM; CNJ_ADD; CNJ_MUL; CNJ_CX; CNJ_II] THEN
+  ASM_MESON_TAC[REAL_CX]);;
+
+let REAL_COMPLEX_ENDOMORPHISM = prove
+ (`!f:complex->complex.
+        IMAGE f real SUBSET real /\
+        (!x y. f(x + y) = f x + f y) /\
+        (!x y. f(x * y) = f x * f y) <=>
+        f = (\x. Cx(&0)) \/ f = I \/ f = cnj`,
+  GEN_TAC THEN EQ_TAC THENL
+   [STRIP_TAC;
+    STRIP_TAC THEN
+    ASM_REWRITE_TAC[SUBSET; FORALL_IN_IMAGE; COMPLEX_MUL_LZERO; COMPLEX_ADD_LID;
+                    I_THM; CNJ_ADD; CNJ_MUL] THEN
+    REWRITE_TAC[IN; CNJ_CNJ; REAL_CX; REAL_CNJ; EQ_SYM_EQ]] THEN
+  ONCE_REWRITE_TAC[TAUT `p \/ q <=> ~p ==> q`] THEN DISCH_TAC THEN
+  SUBGOAL_THEN `!x. real x ==> f x = x` ASSUME_TAC THENL
+   [SUBGOAL_THEN `!n. f(Cx(&n)) = Cx(&n)` ASSUME_TAC THENL
+     [INDUCT_TAC THENL
+       [ASM_MESON_TAC[COMPLEX_RING `z = Cx(&0) <=> z + w = w`];
+        ASM_REWRITE_TAC[GSYM REAL_OF_NUM_SUC; CX_ADD] THEN
+        FIRST_X_ASSUM(MP_TAC o GEN_REWRITE_RULE RAND_CONV [FUN_EQ_THM]) THEN
+        REWRITE_TAC[NOT_FORALL_THM; LEFT_IMP_EXISTS_THM] THEN
+        X_GEN_TAC `z:complex` THEN STRIP_TAC THEN AP_TERM_TAC THEN
+        ASM_MESON_TAC[COMPLEX_RING `w * z = w <=> w = Cx(&0) \/ z = Cx(&1)`]];
+      ALL_TAC] THEN
+    SUBGOAL_THEN `!z. (f:complex->complex) (--z) = --(f z)` ASSUME_TAC THENL
+     [ASM_MESON_TAC[COMPLEX_RING `w = --z <=> w + z = Cx(&0)`];
+      ALL_TAC] THEN
+    SUBGOAL_THEN
+     `!z. ~(z = Cx(&0)) ==> (f:complex->complex) (inv z) = inv(f z)`
+    ASSUME_TAC THENL
+     [REPEAT STRIP_TAC THEN MATCH_MP_TAC(COMPLEX_FIELD
+       `z * w = Cx(&1) ==> z = inv w`) THEN
+      ASM_MESON_TAC[COMPLEX_MUL_LINV];
+      ALL_TAC] THEN
+    SUBGOAL_THEN `!q. rational q ==> f(Cx q) = Cx q` ASSUME_TAC THENL
+     [ASM_REWRITE_TAC[rational; LEFT_IMP_EXISTS_THM] THEN
+      MAP_EVERY X_GEN_TAC [`q:real`; `m:real`; `n:real`] THEN
+      STRIP_TAC THEN ASM_SIMP_TAC[real_div; CX_MUL; CX_INV; CX_INJ] THEN
+      BINOP_TAC THENL
+       [UNDISCH_TAC `integer m` THEN SPEC_TAC(`m:real`,`y:real`);
+        AP_TERM_TAC THEN UNDISCH_TAC `integer n` THEN
+        SPEC_TAC(`n:real`,`y:real`)] THEN
+      MATCH_MP_TAC FORALL_INTEGER THEN ASM_SIMP_TAC[CX_NEG];
+      ALL_TAC] THEN
+    MATCH_MP_TAC(MESON[REAL] `(!x. P(Cx x)) ==> (!x. real x ==> P x)`) THEN
+    SUBGOAL_THEN `!x y. x <= y ==> Re(f(Cx x)) <= Re(f(Cx y))` ASSUME_TAC THENL
+     [REPEAT GEN_TAC THEN GEN_REWRITE_TAC LAND_CONV [GSYM REAL_SUB_LE] THEN
+      REWRITE_TAC[REAL_POS_EQ_SQUARE; LEFT_IMP_EXISTS_THM] THEN
+      X_GEN_TAC `z:real` THEN
+      REWRITE_TAC[REAL_RING `z pow 2 = y - x <=> y:real = x + z * z`] THEN
+      DISCH_THEN SUBST1_TAC THEN
+      ASM_REWRITE_TAC[CX_ADD; CX_MUL; RE_ADD; REAL_LE_ADDR] THEN
+      FIRST_X_ASSUM(MP_TAC o GEN_REWRITE_RULE I [SUBSET]) THEN
+      REWRITE_TAC[FORALL_IN_IMAGE] THEN DISCH_THEN(MP_TAC o SPEC `Cx z`) THEN
+      REWRITE_TAC[IN; REAL_CX] THEN REWRITE_TAC[REAL] THEN
+      DISCH_THEN(SUBST1_TAC o SYM) THEN REWRITE_TAC[RE_MUL_CX; RE_CX] THEN
+      REWRITE_TAC[REAL_LE_SQUARE];
+      ALL_TAC] THEN
+    X_GEN_TAC `x:real` THEN REWRITE_TAC[COMPLEX_EQ; RE_CX; IM_CX] THEN
+    FIRST_X_ASSUM(MP_TAC o GEN_REWRITE_RULE I [SUBSET]) THEN
+    REWRITE_TAC[FORALL_IN_IMAGE] THEN DISCH_THEN(MP_TAC o SPEC `Cx x`) THEN
+    REWRITE_TAC[IN; REAL_CX] THEN SIMP_TAC[real] THEN DISCH_TAC THEN
+    MATCH_MP_TAC(REAL_ARITH `~(x < y) /\ ~(y < x) ==> x:real = y`) THEN
+    REPEAT STRIP_TAC THEN
+    FIRST_ASSUM(MP_TAC o MATCH_MP RATIONAL_BETWEEN) THEN
+    DISCH_THEN(X_CHOOSE_THEN `q:real` STRIP_ASSUME_TAC) THENL
+     [FIRST_X_ASSUM(MP_TAC o SPECL [`q:real`; `x:real`]);
+      FIRST_X_ASSUM(MP_TAC o SPECL [`x:real`; `q:real`])] THEN
+    ASM_SIMP_TAC[REAL_LT_IMP_LE; RE_CX] THEN ASM_REAL_ARITH_TAC;
+    ALL_TAC] THEN
+  SUBGOAL_THEN `f(ii) = ii \/ f(ii) = --ii` MP_TAC THENL
+   [REWRITE_TAC[COMPLEX_RING `z = ii \/ z = --ii <=> z * z = --Cx(&1)`] THEN
+    ASM_MESON_TAC[REAL_NEG; REAL_CX; COMPLEX_RING `ii * ii = --Cx(&1)`];
+    ALL_TAC] THEN
+  MATCH_MP_TAC MONO_OR THEN REPEAT STRIP_TAC THEN
+  REWRITE_TAC[FUN_EQ_THM] THEN X_GEN_TAC `z:complex` THEN
+  SUBST1_TAC(SPEC `z:complex` COMPLEX_EXPAND) THEN
+  ASM_REWRITE_TAC[I_THM; CNJ_ADD; CNJ_MUL; CNJ_CX; CNJ_II] THEN
+  ASM_MESON_TAC[REAL_CX]);;

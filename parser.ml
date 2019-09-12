@@ -5,6 +5,7 @@
 (*                                                                           *)
 (*            (c) Copyright, University of Cambridge 1998                    *)
 (*              (c) Copyright, John Harrison 1998-2007                       *)
+(*     (c) Copyright, Andrea Gabrielli, Marco Maggesi 2017-2018              *)
 (* ========================================================================= *)
 
 needs "preterm.ml";;
@@ -178,6 +179,14 @@ let lex =
 (* ------------------------------------------------------------------------- *)
 
 let parse_pretype =
+  let mk_prefinty:num->pretype =
+    let rec prefinty n =
+      if n =/ num_1 then Ptycon("1",[]) else
+      let c = if Num.mod_num n num_2 =/ num_0 then "tybit0" else "tybit1" in
+      Ptycon(c,[prefinty(Num.quo_num n num_2)]) in
+    fun n ->
+      if not(is_integer_num n) || n </ num_1 then failwith "mk_prefinty" else
+      prefinty n in
   let btyop n n' x y = Ptycon(n,[x;y])
   and mk_apptype =
     function
@@ -188,6 +197,7 @@ let parse_pretype =
     match input with
       (Ident s)::rest ->
           (try pretype_of_type(assoc s (type_abbrevs())) with Failure _ ->
+           try mk_prefinty (num_of_string s) with Failure _ ->
            if try get_type_arity s = 0 with Failure _ -> false
            then Ptycon(s,[]) else Utv(s)),rest
     | _ -> raise Noparse
@@ -196,16 +206,17 @@ let parse_pretype =
       (Ident s)::rest -> if try get_type_arity s > 0 with Failure _ -> false
                          then s,rest else raise Noparse
     | _ -> raise Noparse in
-  let rec pretype i = rightbin sumtype (a (Resword "->")) (btyop "fun") "type" i
-  and sumtype i = rightbin prodtype (a (Ident "+")) (btyop "sum") "type" i
-  and prodtype i = rightbin carttype (a (Ident "#")) (btyop "prod") "type" i
-  and carttype i = leftbin apptype (a (Ident "^")) (btyop "cart") "type" i
+  let rec pretype i =
+    rightbin sumtype (a (Resword "->")) (btyop "fun") "proper use of type operator (->)" i
+  and sumtype i = rightbin prodtype (a (Ident "+")) (btyop "sum") "proper use of type operator (+)" i
+  and prodtype i = rightbin carttype (a (Ident "#")) (btyop "prod") "proper use of type operator (#)" i
+  and carttype i = leftbin apptype (a (Ident "^")) (btyop "cart") "proper use of type operator (^)" i
   and apptype i = (atomictypes ++ (type_constructor >> (fun x -> [x])
                                 ||| nothing) >> mk_apptype) i
   and atomictypes i =
         (((a (Resword "(")) ++ typelist ++ a (Resword ")") >> (snd o fst))
       ||| (type_atom >> (fun x -> [x]))) i
-  and typelist i = listof pretype (a (Ident ",")) "type" i in
+  and typelist i = listof pretype (a (Ident ",")) "comma separated list for type constructor" i in
   pretype;;
 
 (* ------------------------------------------------------------------------- *)
@@ -263,22 +274,22 @@ let parse_preterm =
     match l with
       [] -> true
     | h::t -> forall (r h) t && pairwise r t in
-  let rec pfrees ptm acc =
+  let rec pfrees ptm =
     match ptm with
       Varp(v,pty) ->
-        if v = "" && pty = dpty then acc
+        if v = "" && pty = dpty then []
         else if can get_const_type v || can num_of_string v
-                || exists (fun (w,_) -> v = w) (!the_interface) then acc
-        else insert ptm acc
-    | Constp(_,_) -> acc
-    | Combp(p1,p2) -> pfrees p1 (pfrees p2 acc)
-    | Absp(p1,p2) -> subtract (pfrees p2 acc) (pfrees p1 [])
-    | Typing(p,_) -> pfrees p acc in
+                || exists (fun (w,_) -> v = w) (!the_interface) then []
+        else [ptm]
+    | Constp(_,_) -> []
+    | Combp(p1,p2) -> union (pfrees p1) (pfrees p2)
+    | Absp(p1,p2) -> subtract (pfrees p2) (pfrees p1)
+    | Typing(p,_) -> pfrees p in
   let pdest_eq (Combp(Combp(Varp(("="|"<=>"),_),l),r)) = l,r in
   let pmk_let (letbindings,body) =
     let vars,tms = unzip (map pdest_eq letbindings) in
     let _ = warn(not
-     (pairwise (fun s t -> intersect(pfrees s []) (pfrees t []) = []) vars))
+     (pairwise (fun s t -> intersect(pfrees s) (pfrees t) = []) vars))
      "duplicate names on left of let-binding: latest is used" in
     let lend = Combp(Varp("LET_END",dpty),body) in
     let abs = itlist (fun v t -> Absp(v,t)) vars lend in
@@ -318,8 +329,8 @@ let parse_preterm =
     Combp(Varp("GSPEC",dpty),Absp(v,bod)) in
   let pmk_setabs (fabs,babs) =
     let evs =
-      let fvs = pfrees fabs []
-      and bvs = pfrees babs [] in
+      let fvs = pfrees fabs
+      and bvs = pfrees babs in
       if length fvs <= 1 || bvs = [] then fvs
       else intersect fvs bvs in
     pmk_setcompr (fabs,evs,babs) in
@@ -337,7 +348,7 @@ let parse_preterm =
   let pmk_geq s t = Combp(Combp(Varp("GEQ",dpty),s),t) in
   let pmk_pattern ((pat,guards),res) =
     let x = pgenvar() and y = pgenvar() in
-    let vs = pfrees pat []
+    let vs = pfrees pat
     and bod =
      if guards = [] then
        Combp(Combp(Varp("_UNGUARDED_PATTERN",dpty),pmk_geq pat x),
@@ -350,8 +361,8 @@ let parse_preterm =
   let pretype = parse_pretype
   and string inp =
     match inp with
-      Ident s::rst when String.length s >= 2 &
-                        String.sub s 0 1 = "\"" &
+      Ident s::rst when String.length s >= 2 &&
+                        String.sub s 0 1 = "\"" &&
                         String.sub s (String.length s - 1) 1 = "\""
        -> String.sub s 1 (String.length s - 2),rst
     | _ -> raise Noparse
@@ -365,7 +376,7 @@ let parse_preterm =
   and lmk_setenum(l,_) = pmk_set_enum l
   and lmk_setabs(((l,_),r),_) = pmk_setabs(l,r)
   and lmk_setcompr(((((f,_),vs),_),b),_) =
-     pmk_setcompr(f,pfrees vs [],b)
+     pmk_setcompr(f,pfrees vs,b)
   and lmk_decimal ((_,l0),ropt) =
     let l,r = if ropt = [] then l0,"1" else
               let r0 = hd ropt in
@@ -432,6 +443,10 @@ let parse_preterm =
     (try_user_parser
   ||| ((a (Resword "(") ++ a (Resword ":")) ++ pretype ++ a (Resword ")")
        >> lmk_univ)
+  ||| ((a (Resword "(") ++ a (Resword ":")) ++ pretype
+       >> (fun _ -> failwith "closing right parenthesis on universe expected"))
+  ||| ((a (Resword "(") ++ a (Resword ":"))
+       >> (fun _ -> failwith "type in universe construction expected"))
   ||| (string >> pmk_string)
   ||| (a (Resword "(") ++
        (any_identifier >> (fun s -> Varp(s,dpty))) ++
@@ -448,12 +463,25 @@ let parse_preterm =
        a (Resword "else") ++
        preterm
        >> lmk_ite)
+  ||| ((a (Resword "if") ) ++ preterm ++ a (Resword "then") ++ preterm ++ a (Resword "else") 
+      >> (fun _ -> failwith "malformed else clause"))
+  ||| ((a (Resword "if") ) ++ preterm ++ a (Resword "then") ++ preterm
+      >> (fun _ -> failwith "missing else following then clause"))
+  ||| ((a (Resword "if") ) ++ preterm ++ a (Resword "then")
+      >> (fun _ -> failwith "malformed then clause in if-then-else statement"))
+  ||| ((a (Resword "if") ) ++ preterm
+      >> (fun _ -> failwith "missing 'then' reserved word in if-then-else statement"))
+  ||| ((a (Resword "if") )
+      >> (fun _ -> failwith "malformed if-then-else"))
   ||| (a (Resword "[") ++
-       elistof preterm (a (Resword ";")) "term" ++
+       elistof preterm (a (Resword ";")) "semicolon separated list of terms" ++
        a (Resword "]")
        >> (pmk_list o snd o fst))
+  ||| (a (Resword "[") ++
+       elistof preterm (a (Resword ";")) "semicolon separated list of terms"
+        >> (fun _ -> failwith "closing square bracket on list expected"))
   ||| (a (Resword "{") ++
-       (elistof nocommapreterm (a (Ident ",")) "term" ++  a (Resword "}")
+       (elistof nocommapreterm (a (Ident ",")) "comma separated list of terms" ++  a (Resword "}")
               >> lmk_setenum
         ||| (preterm ++ a (Resword "|") ++ preterm ++ a (Resword "}")
               >> lmk_setabs)
@@ -461,13 +489,17 @@ let parse_preterm =
              a (Resword "|") ++ preterm ++ a (Resword "}")
              >> lmk_setcompr))
       >> snd)
+  ||| (a (Resword "{") >> (fun _ -> failwith "malformed set {}"))
   ||| (a (Resword "match") ++ preterm ++ a (Resword "with") ++ clauses
        >> (fun (((_,e),_),c) -> Combp(Combp(Varp("_MATCH",dpty),e),c)))
+  ||| (a (Resword "match")  >> (fun _ -> failwith "malformed match-with statement"))
   ||| (a (Resword "function") ++ clauses
        >> (fun (_,c) -> Combp(Varp("_FUNCTION",dpty),c)))
+  ||| (a (Resword "function")  >> (fun _ -> failwith "malformed function and pattern clauses"))
   ||| (a (Ident "#") ++ identifier ++
        possibly (a (Resword ".") ++ identifier >> snd)
        >> lmk_decimal)
+  ||| (a (Ident "#")  >> (fun _ -> failwith "malformed numerical # identifier"))
   ||| (identifier >> (fun s -> Varp(s,dpty)))) i
   and pattern i =
     (preterm ++ possibly (a (Resword "when") ++ preterm >> snd)) i
@@ -480,8 +512,8 @@ let parse_preterm =
   (fun inp ->
     match inp with
       [Ident s] when
-        not(String.length s >= 2 &
-            String.sub s 0 1 = "\"" &
+        not(String.length s >= 2 &&
+            String.sub s 0 1 = "\"" &&
             String.sub s (String.length s - 1) 1 = "\"")
       -> Varp(s,dpty),[]
     | _ -> preterm inp);;

@@ -5,6 +5,8 @@
 (*                                                                           *)
 (*            (c) Copyright, University of Cambridge 1998                    *)
 (*              (c) Copyright, John Harrison 1998-2007                       *)
+(*                 (c) Copyright, Marco Maggesi 2017                         *)
+(*     (c) Copyright, Andrea Gabrielli, Marco Maggesi 2017-2018              *)
 (* ========================================================================= *)
 
 needs "nets.ml";;
@@ -162,6 +164,7 @@ let pp_print_type,pp_print_qtype =
     if flag then "("^s^")" else s in
   let rec sot pr ty =
     try dest_vartype ty with Failure _ ->
+    try string_of_num(dest_finty ty) with Failure _ ->
     match dest_type ty with
       con,[] -> con
     | "fun",[ty1;ty2] -> soc "->" (pr > 0) [sot 1 ty1; sot 0 ty2]
@@ -197,7 +200,7 @@ let pp_print_term =
     try let il,r = dest_comb tm in
         let i,l = dest_comb il in
         if i = c ||
-           (is_const i && is_const c &
+           (is_const i && is_const c &&
             reverse_interface(dest_const i) = reverse_interface(dest_const c))
         then l,r else fail()
     with Failure _ -> failwith "DEST_BINARY"
@@ -233,10 +236,15 @@ let pp_print_term =
     if name_of s = "_SEQPATTERN" && length args = 2 then
       dest_clause (hd args)::dest_clauses(hd(tl args))
     else [dest_clause tm] in
+  let pdest_cond tm =
+    match tm with
+      Comb(Comb(Comb(Const("COND",_),i),t),e) -> (i,t),e
+    | _ -> failwith "pdest_cond" in
   fun fmt ->
     let rec print_term prec tm =
       try try_user_printer fmt tm with Failure _ ->
-      try pp_print_string fmt (string_of_num(dest_numeral tm)) with Failure _ ->
+      try pp_print_string fmt (string_of_num(dest_numeral tm))
+      with Failure _ ->
       try (let tms = dest_list tm in
            try if fst(dest_type(hd(snd(dest_type(type_of tm))))) <> "char"
                then fail() else
@@ -244,9 +252,10 @@ let pp_print_term =
                let s = "\"" ^ String.escaped (implode ccs) ^ "\"" in
                pp_print_string fmt s
            with Failure _ ->
-               pp_print_string fmt "[";
-               print_term_sequence "; " 0 tms;
-               pp_print_string fmt "]")
+               pp_open_box fmt 0; pp_print_string fmt "[";
+               pp_open_box fmt 0; print_term_sequence true ";" 0 tms;
+               pp_close_box fmt (); pp_print_string fmt "]";
+               pp_close_box fmt ())
       with Failure _ ->
       if is_gabs tm then print_binder prec tm else
       let hop,args = strip_comb tm in
@@ -256,7 +265,8 @@ let pp_print_term =
       try if s = "EMPTY" && is_const tm && args = [] then
           pp_print_string fmt "{}" else fail()
       with Failure _ ->
-      try if s = "UNIV" && !typify_universal_set && is_const tm && args = [] then
+      try if s = "UNIV" && !typify_universal_set && is_const tm && args = []
+          then
             let ty = fst(dest_fun_ty(type_of tm)) in
             (pp_print_string fmt "(:";
              pp_print_type fmt ty;
@@ -266,9 +276,9 @@ let pp_print_term =
       try if s <> "INSERT" then fail() else
           let mems,oth = splitlist (dest_binary "INSERT") tm in
           if is_const oth && fst(dest_const oth) = "EMPTY" then
-            (pp_print_string fmt "{";
-             print_term_sequence ", " 14 mems;
-             pp_print_string fmt "}")
+            (pp_open_box fmt 0; pp_print_string fmt "{"; pp_open_box fmt 0;
+             print_term_sequence true "," 14 mems;
+             pp_close_box fmt (); pp_print_string fmt "}"; pp_close_box fmt ())
           else fail()
       with Failure _ ->
       try if not (s = "GSPEC") then fail() else
@@ -281,12 +291,12 @@ let pp_print_term =
           print_term 0 fabs;
           pp_print_string fmt " | ";
           (let fvs = frees fabs and bvs = frees babs in
-           if not(!print_unambiguous_comprehensions) &
+           if not(!print_unambiguous_comprehensions) &&
               set_eq evs
                (if (length fvs <= 1 || bvs = []) then fvs
                 else intersect fvs bvs)
            then ()
-           else (print_term_sequence "," 14 evs;
+           else (print_term_sequence false "," 14 evs;
                  pp_print_string fmt " | "));
           print_term 0 babs;
           pp_print_string fmt "}"
@@ -313,7 +323,8 @@ let pp_print_term =
         let s_num = string_of_num(quo_num n_num n_den) in
         let s_den = implode(tl(explode(string_of_num
                         (n_den +/ (mod_num n_num n_den))))) in
-        pp_print_string fmt("#"^s_num^(if n_den = Int 1 then "" else ".")^s_den)
+        pp_print_string fmt
+         ("#"^s_num^(if n_den = Int 1 then "" else ".")^s_den)
       with Failure _ -> try
         if s <> "_MATCH" || length args <> 2 then failwith "" else
         let cls = dest_clauses(hd(tl args)) in
@@ -338,24 +349,41 @@ let pp_print_term =
          if prec = 0 then () else pp_print_string fmt ")")
       with Failure _ ->
       if s = "COND" && length args = 3 then
-        (if prec = 0 then () else pp_print_string fmt "(";
+        ((if prec = 0 then () else pp_print_string fmt "(");
          pp_open_hvbox fmt (-1);
-         pp_print_string fmt "if ";
-         print_term 0 (hd args);
-         pp_print_break fmt 0 0;
-         pp_print_string fmt " then ";
-         print_term 0 (hd(tl args));
-         pp_print_break fmt 0 0;
-         pp_print_string fmt " else ";
-         print_term 0 (hd(tl(tl args)));
+         (let ccls,ecl = splitlist pdest_cond tm in
+          if length ccls <= 4 then
+           (pp_print_string fmt "if ";
+            print_term 0 (hd args);
+            pp_print_break fmt 0 0;
+            pp_print_string fmt " then ";
+            print_term 0 (hd(tl args));
+            pp_print_break fmt 0 0;
+            pp_print_string fmt " else ";
+            print_term 0 (hd(tl(tl args)))
+           )
+          else
+           (pp_print_string fmt "if ";
+            print_term 0 (fst(hd ccls));
+            pp_print_string fmt " then ";
+            print_term 0 (snd(hd ccls));
+            pp_print_break fmt 0 0;
+            do_list (fun (i,t) ->
+              pp_print_string fmt " else if ";
+              print_term 0 i;
+              pp_print_string fmt " then ";
+              print_term 0 t;
+              pp_print_break fmt 0 0) (tl ccls);
+            pp_print_string fmt " else ";
+            print_term 0 ecl));
          pp_close_box fmt ();
-         if prec = 0 then () else pp_print_string fmt ")")
+         (if prec = 0 then () else pp_print_string fmt ")"))
       else if is_prefix s && length args = 1 then
         (if prec = 1000 then pp_print_string fmt "(" else ();
          pp_print_string fmt s;
          (if isalnum s ||
-           s = "--" &
-           length args = 1 &
+           s = "--" &&
+           length args = 1 &&
            (try let l,r = dest_comb(hd args) in
                 let s0 = name_of l and ty0 = type_of l in
                 reverse_interface (s0,ty0) = "--" ||
@@ -407,12 +435,14 @@ let pp_print_term =
          if prec = 1000 then pp_print_string fmt ")" else ();
          pp_close_box fmt ())
 
-    and print_term_sequence sep prec tms =
+    and print_term_sequence break sep prec tms =
       if tms = [] then () else
       (print_term prec (hd tms);
        let ttms = tl tms in
-       if ttms = [] then ()
-       else (pp_print_string fmt sep; print_term_sequence sep prec ttms))
+       if ttms = [] then () else
+       (pp_print_string fmt sep;
+        (if break then pp_print_space fmt ());
+        print_term_sequence break sep prec ttms))
 
     and print_binder prec tm =
       let absf = is_gabs tm in
@@ -517,9 +547,9 @@ let print_thm = pp_print_thm std_formatter;;
 (* Install all the printers.                                                 *)
 (* ------------------------------------------------------------------------- *)
 
-#install_printer print_qtype;;
-#install_printer print_qterm;;
-#install_printer print_thm;;
+#install_printer pp_print_qtype;;
+#install_printer pp_print_qterm;;
+#install_printer pp_print_thm;;
 
 (* ------------------------------------------------------------------------- *)
 (* Conversions to string.                                                    *)

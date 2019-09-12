@@ -129,13 +129,17 @@ let ZIP = prove
    (ZIP (CONS h1 t1) (CONS h2 t2) = CONS (h1,h2) (ZIP t1 t2))`,
   REWRITE_TAC[ZIP_DEF; HD; TL]);;
 
+let ALLPAIRS = new_recursive_definition list_RECURSION
+  `(ALLPAIRS f [] l <=> T) /\
+   (ALLPAIRS f (CONS h t) l <=> ALL (f h) l /\ ALLPAIRS f t l)`;;
+
 let PAIRWISE = new_recursive_definition list_RECURSION
   `(PAIRWISE (r:A->A->bool) [] <=> T) /\
    (PAIRWISE (r:A->A->bool) (CONS h t) <=> ALL (r h) t /\ PAIRWISE r t)`;;
 
-let list_of_seq = new_recursive_definition num_RECURSION        
- `list_of_seq (s:num->A) 0 = [] /\                                
-  list_of_seq s (SUC n) = APPEND (list_of_seq s n) [s n]`;;           
+let list_of_seq = new_recursive_definition num_RECURSION
+ `list_of_seq (s:num->A) 0 = [] /\
+  list_of_seq s (SUC n) = APPEND (list_of_seq s n) [s n]`;;
 
 (* ------------------------------------------------------------------------- *)
 (* Various trivial theorems.                                                 *)
@@ -166,6 +170,10 @@ let REVERSE_APPEND = prove
 let REVERSE_REVERSE = prove
  (`!l:A list. REVERSE(REVERSE l) = l`,
   LIST_INDUCT_TAC THEN ASM_REWRITE_TAC[REVERSE; REVERSE_APPEND; APPEND]);;
+
+let REVERSE_EQ_EMPTY = prove
+ (`!l:A list. REVERSE l = [] <=> l = []`,
+  MESON_TAC[REVERSE_REVERSE; REVERSE]);;
 
 let CONS_11 = prove
  (`!(h1:A) h2 t1 t2. (CONS h1 t1 = CONS h2 t2) <=> (h1 = h2) /\ (t1 = t2)`,
@@ -208,6 +216,12 @@ let LENGTH_EQ_CONS = prove
   LIST_INDUCT_TAC THEN REWRITE_TAC[LENGTH; NOT_SUC; NOT_CONS_NIL] THEN
   ASM_REWRITE_TAC[SUC_INJ; CONS_11] THEN MESON_TAC[]);;
 
+let LENGTH_REVERSE = prove
+ (`!l:A list. LENGTH(REVERSE l) = LENGTH l`,
+  LIST_INDUCT_TAC THEN
+  ASM_REWRITE_TAC[REVERSE; LENGTH_APPEND; LENGTH] THEN
+  REWRITE_TAC[ADD_CLAUSES; MULT_CLAUSES]);;
+
 let MAP_o = prove
  (`!f:A->B. !g:B->C. !l. MAP (g o f) l = MAP g (MAP f l)`,
   GEN_TAC THEN GEN_TAC THEN LIST_INDUCT_TAC THEN
@@ -237,6 +251,13 @@ let ALL_MAP = prove
  (`!P f l. ALL P (MAP f l) <=> ALL (P o f) l`,
   GEN_TAC THEN GEN_TAC THEN LIST_INDUCT_TAC THEN
   ASM_REWRITE_TAC[ALL; MAP; o_THM]);;
+
+let ALL_EQ = prove
+ (`!l. ALL R l /\ (!x. R x ==> (P x <=> Q x))
+       ==> (ALL P l <=> ALL Q l)`,
+  LIST_INDUCT_TAC THEN REWRITE_TAC[ALL] THEN
+  STRIP_TAC THEN BINOP_TAC THEN FIRST_ASSUM MATCH_MP_TAC THEN
+  ASM_REWRITE_TAC[]);;
 
 let ALL_T = prove
  (`!l. ALL (\x. T) l`,
@@ -296,6 +317,11 @@ let ALL_MEM = prove
 let LENGTH_REPLICATE = prove
  (`!n x. LENGTH(REPLICATE n x) = n`,
   INDUCT_TAC THEN ASM_REWRITE_TAC[LENGTH; REPLICATE]);;
+
+let MEM_REPLICATE = prove
+ (`!n x y:A. MEM x (REPLICATE n y) <=> x = y /\ ~(n = 0)`,
+  INDUCT_TAC THEN ASM_REWRITE_TAC[MEM; REPLICATE; NOT_SUC] THEN
+  MESON_TAC[]);;
 
 let EX_MAP = prove
  (`!P f l. EX P (MAP f l) <=> EX (P o f) l`,
@@ -395,6 +421,29 @@ let AND_ALL2 = prove
   LIST_INDUCT_TAC THEN LIST_INDUCT_TAC THEN ASM_REWRITE_TAC[ALL2] THEN
   REWRITE_TAC[CONJ_ACI]);;
 
+let ALLPAIRS_SYM = prove
+ (`!P l m. ALLPAIRS P l m <=> ALLPAIRS (\x y. P y x) m l`,
+  GEN_TAC THEN LIST_INDUCT_TAC THEN REWRITE_TAC[ALLPAIRS] THEN
+  LIST_INDUCT_TAC THEN ASM_REWRITE_TAC[ALLPAIRS; ALL] THEN
+  ASM_MESON_TAC[]);;
+
+let ALLPAIRS_MEM = prove
+ (`!P l m. (!x y. MEM x l /\ MEM y m ==> P x y) <=> ALLPAIRS P l m`,
+  GEN_TAC THEN
+  LIST_INDUCT_TAC THEN REWRITE_TAC[ALLPAIRS; GSYM ALL_MEM; MEM] THEN
+  ASM_MESON_TAC[]);;
+
+let ALLPAIRS_MAP = prove
+ (`!P l m. ALLPAIRS P (MAP f l) (MAP g m) <=>
+           ALLPAIRS (\x y. P (f x) (g y)) l m`,
+  REWRITE_TAC[GSYM ALLPAIRS_MEM; MEM_MAP] THEN MESON_TAC[]);;
+
+let ALLPAIRS_EQ = prove
+ (`!l m. !P Q. ALL P (l:A list) /\ ALL Q (m:B list) /\
+               (!p q. P p /\ Q q ==> (R p q <=> R' p q))
+               ==> (ALLPAIRS R l m <=> ALLPAIRS R' l m)`,
+  REWRITE_TAC[GSYM ALLPAIRS_MEM; GSYM ALL_MEM] THEN MESON_TAC[]);;
+
 let ALL2_ALL = prove
  (`!P l. ALL2 P l l <=> ALL (\x. P x x) l`,
   GEN_TAC THEN LIST_INDUCT_TAC THEN
@@ -404,20 +453,27 @@ let APPEND_EQ_NIL = prove
  (`!l m. (APPEND l m = []) <=> (l = []) /\ (m = [])`,
   REWRITE_TAC[GSYM LENGTH_EQ_NIL; LENGTH_APPEND; ADD_EQ_0]);;
 
-let APPEND_LCANCEL = prove                              
- (`!l1 l2 l3:A list. APPEND l1 l2 = APPEND l1 l3 <=> l2 = l3`,     
-  LIST_INDUCT_TAC THEN ASM_REWRITE_TAC[APPEND; CONS_11]);;      
-                                                                             
-let APPEND_RCANCEL = prove                                                
- (`!l1 l2 l3:A list. APPEND l1 l3 = APPEND l2 l3 <=> l1 = l2`,   
-  ONCE_REWRITE_TAC[MESON[REVERSE_REVERSE]                      
-   `l = l' <=> REVERSE l = REVERSE l'`] THEN                                 
-  REWRITE_TAC[REVERSE_APPEND; APPEND_LCANCEL]);;                             
+let APPEND_LCANCEL = prove
+ (`!l1 l2 l3:A list. APPEND l1 l2 = APPEND l1 l3 <=> l2 = l3`,
+  LIST_INDUCT_TAC THEN ASM_REWRITE_TAC[APPEND; CONS_11]);;
+
+let APPEND_RCANCEL = prove
+ (`!l1 l2 l3:A list. APPEND l1 l3 = APPEND l2 l3 <=> l1 = l2`,
+  ONCE_REWRITE_TAC[MESON[REVERSE_REVERSE]
+   `l = l' <=> REVERSE l = REVERSE l'`] THEN
+  REWRITE_TAC[REVERSE_APPEND; APPEND_LCANCEL]);;
 
 let LENGTH_MAP2 = prove
- (`!f l m. (LENGTH l = LENGTH m) ==> (LENGTH(MAP2 f l m) = LENGTH m)`,
+ (`!f l m. LENGTH l = LENGTH m ==> LENGTH(MAP2 f l m) = LENGTH m`,
   GEN_TAC THEN LIST_INDUCT_TAC THEN LIST_INDUCT_TAC THEN
   ASM_SIMP_TAC[LENGTH; NOT_CONS_NIL; NOT_SUC; MAP2; SUC_INJ]);;
+
+let EL_MAP2 = prove
+ (`!f l m k. k < LENGTH l /\ k < LENGTH m
+             ==> EL k (MAP2 f l m) = f (EL k l) (EL k m)`,
+  GEN_TAC THEN LIST_INDUCT_TAC THEN LIST_INDUCT_TAC THEN
+  ASM_SIMP_TAC[LENGTH; CONJUNCT1 LT] THEN
+  INDUCT_TAC THEN ASM_SIMP_TAC[LENGTH; MAP2; EL; HD; TL; LT_SUC]);;
 
 let MAP_EQ_NIL  = prove
  (`!f l. MAP f l = [] <=> l = []`,
@@ -450,12 +506,12 @@ let MAP_I = prove
  (`MAP I = I`,
   REWRITE_TAC[FUN_EQ_THM; I_DEF; MAP_ID]);;
 
-let BUTLAST_APPEND = prove                          
- (`!l m:A list. BUTLAST(APPEND l m) =           
+let BUTLAST_APPEND = prove
+ (`!l m:A list. BUTLAST(APPEND l m) =
                 if m = [] then BUTLAST l else APPEND l (BUTLAST m)`,
-  SIMP_TAC[COND_RAND; APPEND_NIL; MESON[]               
-   `(if p then T else q) <=> ~p ==> q`] THEN                   
-  LIST_INDUCT_TAC THEN ASM_SIMP_TAC[APPEND; BUTLAST; APPEND_EQ_NIL]);;   
+  SIMP_TAC[COND_RAND; APPEND_NIL; MESON[]
+   `(if p then T else q) <=> ~p ==> q`] THEN
+  LIST_INDUCT_TAC THEN ASM_SIMP_TAC[APPEND; BUTLAST; APPEND_EQ_NIL]);;
 
 let APPEND_BUTLAST_LAST = prove
  (`!l. ~(l = []) ==> APPEND (BUTLAST l) [LAST l] = l`,
@@ -470,6 +526,15 @@ let LAST_APPEND = prove
 let LENGTH_TL = prove
  (`!l. ~(l = []) ==> LENGTH(TL l) = LENGTH l - 1`,
   LIST_INDUCT_TAC THEN REWRITE_TAC[LENGTH; TL; ARITH; SUC_SUB1]);;
+
+let LAST_REVERSE = prove
+ (`!l:A list. ~(l = []) ==> LAST(REVERSE l) = HD l`,
+  LIST_INDUCT_TAC THEN
+  REWRITE_TAC[HD; REVERSE; LAST; LAST_APPEND; NOT_CONS_NIL]);;
+
+let HD_REVERSE = prove
+ (`!l:A list. ~(l = []) ==> HD(REVERSE l) = LAST l`,
+  MESON_TAC[LAST_REVERSE; REVERSE_REVERSE; REVERSE_EQ_EMPTY]);;
 
 let EL_APPEND = prove
  (`!k l m. EL k (APPEND l m) = if k < LENGTH l then EL k l
@@ -715,7 +780,7 @@ let dest_char,mk_char,dest_string,mk_string,CHAR_EQ_CONV,STRING_EQ_CONV =
       let pp = prefix n avars in
       let pth = if b then ASCII_NEQS_FT else ASCII_NEQS_TF in
       INST (zip p pp @ zip s1 ss1 @ zip s2 ss2) (el n pth) in
-  let rec STRING_DISTINCTNESS =
+  let STRING_DISTINCTNESS =
     let xtm,xstm = `x:char`,`xs:string`
     and ytm,ystm = `y:char`,`ys:string`
     and niltm = `[]:string` in
@@ -728,7 +793,7 @@ let dest_char,mk_char,dest_string,mk_string,CHAR_EQ_CONV,STRING_EQ_CONV =
      (`(NIL:string = CONS x xs <=> F) /\
        (CONS x xs:string = NIL <=> F)`,
       REWRITE_TAC[NOT_CONS_NIL]) in
-    fun s1 s2 ->
+    let rec STRING_DISTINCTNESS s1 s2 =
       if s1 = niltm
       then if s2 = niltm then NIL_EQ_THM
            else let c2,s2 = rand (rator s2),rand s2 in
@@ -743,6 +808,7 @@ let dest_char,mk_char,dest_string,mk_string,CHAR_EQ_CONV,STRING_EQ_CONV =
            else let ilist = [c1,xtm; c2,ytm; s1,xstm; s2,ystm] in
                 let itm = INST ilist CONS_NEQ_THM in
                 MP itm (CHAR_DISTINCTNESS c1 c2) in
+    STRING_DISTINCTNESS in
   let CHAR_EQ_CONV : conv =
     fun tm ->
       let c1,c2 = dest_eq tm in
