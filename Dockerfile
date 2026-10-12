@@ -13,7 +13,7 @@
 #   docker run --rm -it hol-light
 
 ARG ALPINE_VERSION=3.24
-ARG OCAML_VERSION=5.5.0
+ARG OCAML_VERSION=5.5.1
 ARG CAMLP5_VERSION=8.05.02
 
 # Same path in both stages: the OCaml installation and hol.sh hard-code it.
