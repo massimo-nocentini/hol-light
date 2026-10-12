@@ -4,7 +4,7 @@ OCAML_VERSION=`ocamlc -version | cut -c1-4`
 OCAML_BINARY_VERSION=`ocamlc -version | cut -c1-3`
 OCAML_UNARY_VERSION=`ocamlc -version | cut -c1`
 
-if [ ${OCAML_BINARY_VERSION} = "5.4" ]
+if [ ${OCAML_BINARY_VERSION} = "5.4" ] || [ ${OCAML_BINARY_VERSION} = "5.5" ]
 then
   echo "update_database_5.4.ml"
 elif [ ${OCAML_VERSION} = "4.14" ]
